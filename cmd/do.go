@@ -67,9 +67,7 @@ func doTask(args []string) {
 	}
 	defer db.Close()
 
-	// build map of displayed task number to
-	taskNumToId := make(map[int][]byte)
-	if err = db.View(func(tx *bolt.Tx) error {
+	if err = db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("tasks"))
 		if b == nil {
 			fmt.Println("Task list has not been created.")
@@ -77,28 +75,27 @@ func doTask(args []string) {
 		}
 
 		c := b.Cursor()
-		index := 0
-		for k, _ := c.First(); k != nil; k, _ = c.Next() {
-			index++
-			taskNumToId[index] = k
+		var k, v []byte
+		for i:=1; i<=taskNum; i++ {
+			if i == 1 {
+				k, v = c.First()
+			} else {
+				k, v = c.Next()
+			}
+
+			if k == nil {
+				return fmt.Errorf("Task %d does not exist.\n", taskNum)
+			}
+		}
+		
+		if err := tx.Bucket([]byte("tasks")).Delete(k); err == nil {
+			fmt.Printf("You have completed the \"%s\" task.\n", string(v))
 		}
 
-		return nil
+		return err
 	}); err != nil {
 		log.Fatal(err)
-		return
 	}
 
-	if taskId, ok := taskNumToId[taskNum]; ok {
-		// delete task from DB
-		if err := db.Update(func(tx *bolt.Tx) error {
-			return tx.Bucket([]byte("tasks")).Delete(taskId)
-		}); err != nil {
-			log.Fatal(err)
-			return
-		}
-	} else {
-		fmt.Printf("Task %d does not exist.\n", taskNum)
-		return
-	}
+	return
 }
